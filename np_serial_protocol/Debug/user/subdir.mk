@@ -18,13 +18,13 @@ C_DEPS += \
 
 
 # Each subdirectory must supply rules for building sources it contributes
-user/%.o user/%.su user/%.cyclo: ../user/%.c user/subdir.mk
-	arm-none-eabi-gcc "$<" -mcpu=cortex-m3 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F103xB -c -I"C:/Users/peter/OneDrive/Desktop/Github/np_serial_protocol/np_serial_protocol/user" -I../Core/Inc -I../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy -I../Drivers/STM32F1xx_HAL_Driver/Inc -I../Drivers/CMSIS/Device/ST/STM32F1xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"$(@:%.o=%.d)" -MT"$@" --specs=nano.specs -mfloat-abi=soft -mthumb -o "$@"
+user/%.o user/%.su: ../user/%.c user/subdir.mk
+	arm-none-eabi-gcc "$<" -mcpu=cortex-m3 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F103xB -c -I"C:/Users/NIRUJA/Desktop/Github/np_serial_protocol/np_serial_protocol/user" -I../Core/Inc -I../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy -I../Drivers/STM32F1xx_HAL_Driver/Inc -I../Drivers/CMSIS/Device/ST/STM32F1xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -MMD -MP -MF"$(@:%.o=%.d)" -MT"$@" --specs=nano.specs -mfloat-abi=soft -mthumb -o "$@"
 
 clean: clean-user
 
 clean-user:
-	-$(RM) ./user/adapter.cyclo ./user/adapter.d ./user/adapter.o ./user/adapter.su ./user/uart.cyclo ./user/uart.d ./user/uart.o ./user/uart.su
+	-$(RM) ./user/adapter.d ./user/adapter.o ./user/adapter.su ./user/uart.d ./user/uart.o ./user/uart.su
 
 .PHONY: clean-user
 
