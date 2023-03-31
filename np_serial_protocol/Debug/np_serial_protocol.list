@@ -5573,6 +5573,7 @@ static void receiveThread() {
 		return;
  8001f7a:	bf00      	nop
  8001f7c:	46b5      	mov	sp, r6
+	//after this go to the next phase
 }
  8001f7e:	372c      	adds	r7, #44	; 0x2c
  8001f80:	46bd      	mov	sp, r7

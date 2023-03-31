@@ -193,6 +193,7 @@ static void receiveThread() {
 
 	console(CONSOLE_INFO, __func__, "Data received success\n");
 	receiveCallback(can_id, data, len);
+	//after this go to the next phase
 }
 
 
