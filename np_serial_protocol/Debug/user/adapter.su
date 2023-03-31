@@ -1,0 +1,4 @@
+../user/adapter.c:17:6:console	16	static
+../user/adapter.c:22:6:receive	40	static
+../user/adapter.c:103:6:init	8	static
+../user/adapter.c:111:6:loop	8	static
