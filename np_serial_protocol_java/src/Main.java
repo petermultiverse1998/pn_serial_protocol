@@ -7,17 +7,32 @@ import java.util.Vector;
 //import tools.*;
 
 public class Main {
+    static volatile boolean transmitted = true;
     public static void test(SerialUART uart){
         uart.enableCanMode();
 //        uart.setCanReceiveCallback(flash::receiveCallback);
-//        uart.setCanTransmitCallback(status -> {
+
+        uart.setCanTransmitCallback(status -> {
+            transmitted = true;
 //            flash.transmittedCallback();
-////            System.out.println("Transmitted");
-//        });
+//            System.out.println("Transmitted");
+        });
         System.out.println(uart.connect() ? "Connected" : "Connection failed");
 //        while(true){
-        uart.send(0x10, new byte[]{1,2,3,4,5,6,7,8});
-        System.out.println("Retrying.....");
+        transmitted = true;
+        for(int i=1;i<=(1024);i++) {
+            while (!transmitted)
+                Thread.onSpinWait();
+            System.out.println("Sending "+i);
+            uart.send(i, new byte[]{1, 2, 3, 4, 5, 6, 7, 8});
+            transmitted = false;
+//            try {
+//                Thread.sleep(10);
+//            } catch (InterruptedException e) {
+//                throw new RuntimeException(e);
+//            }
+        }
+//        System.out.println("Retrying.....");
 //        }
     }
 
@@ -41,7 +56,9 @@ public class Main {
         }
 
         SerialUART uart = new SerialUART(port, 115200);
+        long tic = System.currentTimeMillis();
         test(uart);
+        System.out.println((System.currentTimeMillis()-tic)+" ms");
 //        System.out.println(uart.connect() ? "Connected" : "Connection failed");
 //        System.out.println(uart.disconnect()?"Disconnected":"Disconnect failed");
     }

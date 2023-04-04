@@ -1,5 +1,9 @@
 package tools;
 
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+
 public class CRC32 {
     private int crc;
     public CRC32() {
@@ -31,6 +35,26 @@ public class CRC32 {
 //            crc = (crc << 8) ^ table[((crc>>24 )^ b) & 0xff];
 //        }
         return crc;
+    }
+
+    public int calculate(String file_name){
+        try {
+            InputStream reader = new FileInputStream(file_name);
+            reset();
+//            System.out.println(reader.available());
+//            byte[] b = new byte[4];
+//            for (int i = 0; i < reader.available()/16; i++) {
+//                System.out.printf("%08x ",IntegerAndBytes.bytesToInt32(reader.readNBytes(4)));
+//                System.out.printf("%08x ",IntegerAndBytes.bytesToInt32(reader.readNBytes(4)));
+//                System.out.printf("%08x ",IntegerAndBytes.bytesToInt32(reader.readNBytes(4)));
+//                System.out.printf("%08x \n",IntegerAndBytes.bytesToInt32(reader.readNBytes(4)));
+//            }
+            accumulate(reader.readAllBytes());
+            reader.close();
+            return crc;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static final int[] table = {
