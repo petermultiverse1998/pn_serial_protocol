@@ -2,6 +2,7 @@ import com.fazecast.jSerialComm.SerialPort;
 import tools.ConsoleColors;
 import tools.SerialUART;
 
+import java.util.Arrays;
 import java.util.Scanner;
 import java.util.Vector;
 //import tools.*;
@@ -38,7 +39,17 @@ public class Main {
 //        }
     }
 
+    static void print(){
+        StackTraceElement element = new Exception().getStackTrace()[1];
+        String msg = "There is error";
+        System.out.println(ConsoleColors.RED+element+":"+msg+ConsoleColors.RESET);
+//        System.out.println("("+element.getFileName()+":"+element.getLineNumber()+")");
+    }
+
     public static void main(String[] args) {
+        print();
+        if(true)
+            return;
 
         SerialPort[] ports = SerialPort.getCommPorts();
         if (ports == null)

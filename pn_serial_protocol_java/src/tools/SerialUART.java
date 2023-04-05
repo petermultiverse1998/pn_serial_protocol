@@ -21,11 +21,14 @@ public class SerialUART {
     private static final int SENDING = 1;
     private static final int RECEIVING = 2;
 
+
     private final CRC32 crc32;
     private final SerialPort port;
 
     private static final long TRANSMIT_RECEIVE_TIMEOUT = 1000;
     private static final int TRANSMIT_TRY = 2;
+
+    private static final long RECEIVE_TIMEOUT = 1000;
 
     private CanTransmitCallback canTransmitCallback =(status)-> {};
     private UartTransmitCallback uartTransmitCallback =()-> {};
@@ -40,15 +43,17 @@ public class SerialUART {
     ///////////////////////////////FOR DEBUG///////////////////////////////////////
     private enum ConsoleStatus{ERROR,INFO,WARNING};
     private void console(ConsoleStatus status,String msg){
+        StackTraceElement element = new Exception().getStackTrace()[1];
+
         if(status==ConsoleStatus.ERROR) {
-            System.out.println(ConsoleColors.RED+msg+ConsoleColors.RESET);
+            System.out.println(ConsoleColors.RED+element+":"+msg+ConsoleColors.RESET);
         }else if(status==ConsoleStatus.INFO){
-//            System.out.println(ConsoleColors.GREEN+msg+ConsoleColors.RESET);
+//            System.out.println(ConsoleColors.GREEN+element+":"+msg+ConsoleColors.RESET);
         }else if(status==ConsoleStatus.WARNING){
-            System.out.println(ConsoleColors.YELLOW+msg+ConsoleColors.RESET);
+            System.out.println(ConsoleColors.YELLOW+element+":"+msg+ConsoleColors.RESET);
             Thread.dumpStack();
         }else{
-            System.out.println(msg);
+            System.out.println(element+":"+msg);
         }
     }
 
@@ -61,6 +66,12 @@ public class SerialUART {
         if(statusStack.peek() == IDLE){
             uartReceiveCallback.uartReceiveCallback(receivedBytes);
             return;
+        } else if (statusStack.peek() == RECEIVING) {
+            if((System.currentTimeMillis()-tic)>RECEIVE_TIMEOUT && receiveStatus!=START){
+                receiveStatus = START;
+                bytesToBeReceived = 1;
+                console(ConsoleStatus.ERROR,"Receive timeout "+RECEIVE_TIMEOUT+" ms");
+            }
         }
 
         for(byte b:receivedBytes)
@@ -152,19 +163,14 @@ public class SerialUART {
             isByteReceived = false;
             bytesToBeReceived = ack.length;
 
-//            console(ConsoleStatus.INFO,"Bytes written and waiting for bytes to be received...");
+            console(ConsoleStatus.INFO,"Bytes written and waiting for bytes to be received...");
             while ((System.currentTimeMillis() - tic) <= time_out) {
                 if(!isByteReceived)
                     continue;
 
-                //Check if ack to be received is received
+                // Check if ack to be received is received
                 if(Arrays.equals(ack,bytesReceived)) {
-//                    try {
-//                        Thread.sleep(9);
-//                    } catch (InterruptedException e) {
-//                        throw new RuntimeException(e);
-//                    }
-//                    console(ConsoleStatus.INFO,"Acknowledge received success");
+                    console(ConsoleStatus.INFO,"Acknowledge received success");
                     return SendAndAckStatus.SUCCESS;
                 } else if(returnInIncorrectAck){
                     return SendAndAckStatus.INCORRECT_ACK;
@@ -183,6 +189,7 @@ public class SerialUART {
      * This transmits CAN message
      * @param id        : ID of bytes
      * @param bytes     : Bytes to be sent
+     * @return          : CanTransmitStatus
      */
     private CanTransmitStatus canTransmit(long id, byte[] bytes){
         long timeout = TRANSMIT_RECEIVE_TIMEOUT;//Timeout in Millisecond
@@ -192,7 +199,6 @@ public class SerialUART {
         if(sendAndAck("S".getBytes(),"O".getBytes(),timeout,num_try,false)==SendAndAckStatus.ERROR) {
             console(ConsoleStatus.ERROR,"Start byte: ['S','O'] failed");
             statusStack.pop();
-//            canTransmitCallback.canTransmitCallback(CanTransmitStatus.ERROR);
             return CanTransmitStatus.ERROR;
         }
         console(ConsoleStatus.INFO,"Start byte: ['S','O'] success");
@@ -202,8 +208,7 @@ public class SerialUART {
         if(sendAndAck(id_bytes,id_bytes,timeout,num_try,false)==SendAndAckStatus.ERROR) {
             console(ConsoleStatus.ERROR,"ID bytes: ["+String.format("[0x%x,0x%x]",id,id)+" failed");
             statusStack.pop();
-            canTransmitCallback.canTransmitCallback(CanTransmitStatus.ERROR);
-            return;
+            return CanTransmitStatus.ERROR;
         }
         console(ConsoleStatus.INFO,"ID bytes: "+String.format("[0x%x,0x%x]",id,id)+" success");
 
@@ -212,8 +217,7 @@ public class SerialUART {
         if(sendAndAck(len_bytes,len_bytes,timeout,num_try,false)==SendAndAckStatus.ERROR) {
             console(ConsoleStatus.ERROR,"Length bytes: "+String.format("[%d,%d]",bytes.length,bytes.length)+" failed");
             statusStack.pop();
-            canTransmitCallback.canTransmitCallback(CanTransmitStatus.ERROR);
-            return;
+            return CanTransmitStatus.ERROR;
         }
         console(ConsoleStatus.INFO,"Length bytes: "+String.format("[%d,%d]",bytes.length,bytes.length)+" success");
 
@@ -224,8 +228,7 @@ public class SerialUART {
         if(crcStatus==SendAndAckStatus.ERROR){
             console(ConsoleStatus.ERROR,"CRC bytes: "+String.format("[0x%x,0x%x]",crc,crc)+" failed");
             statusStack.pop();
-            canTransmitCallback.canTransmitCallback(CanTransmitStatus.ERROR);
-            return;
+            return CanTransmitStatus.ERROR;
         }else if(crcStatus==SendAndAckStatus.INCORRECT_ACK)
             console(ConsoleStatus.WARNING,"CRC bytes: "+String.format("[0x%x,0x%x]",crc,crc)+" failed");
         else if(crcStatus==SendAndAckStatus.SUCCESS)
@@ -236,13 +239,12 @@ public class SerialUART {
         if(sendAndAck(crcStatus==SendAndAckStatus.SUCCESS?("\0".getBytes()):(new byte[]{-1}),"O".getBytes(),timeout,num_try,false)==SendAndAckStatus.ERROR) {
             console(ConsoleStatus.ERROR,"End bytes: ['\0' or -1,'O'] failed");
             statusStack.pop();
-            canTransmitCallback.canTransmitCallback(CanTransmitStatus.ERROR);
-            return;
+            return CanTransmitStatus.ERROR;
         }
         console(ConsoleStatus.INFO,"End bytes: ['\0' or -1,'O'] success");
 
         statusStack.pop();
-        canTransmitCallback.canTransmitCallback(crcStatus==SendAndAckStatus.SUCCESS?CanTransmitStatus.SUCCESS:CanTransmitStatus.CRC_FAILED);
+        return crcStatus==SendAndAckStatus.SUCCESS?CanTransmitStatus.SUCCESS:CanTransmitStatus.CRC_FAILED;
     }
 
     /**
@@ -257,54 +259,80 @@ public class SerialUART {
     private byte[] receiveData;
     private long can_ID;
     private long tic = 0;
-    private final long RECEIVE_TIMEOUT = 1000;
     /**
      * This is called in each time received event is called
      * @param bytes     : bytes received
      */
     private void canReceive(byte[] bytes){
-        if((System.currentTimeMillis()-tic)>RECEIVE_TIMEOUT && receiveStatus!=START){
-            receiveStatus = 0;
-            bytesToBeReceived = 1;
-        }
-
+        boolean is_failed = false;
         if(receiveStatus == START){
             if(Arrays.equals(bytes,"S".getBytes())){
                 //Start byte
                 bytesToBeReceived = 4;
                 receiveStatus++;
-                port.writeBytes("O".getBytes(),1);
-                tic = System.currentTimeMillis();
+                console(ConsoleStatus.INFO,"Start byte 'S' received successfully");
+                if(port.writeBytes("O".getBytes(),1)<=0){
+                    console(ConsoleStatus.ERROR,"Start byte ack 'O' sending failed");
+                    is_failed = true;
+                }else {
+                    console(ConsoleStatus.INFO, "Start byte ack 'O' sent successfully");
+                }
             }
         }else if(receiveStatus == ID){
             //ID
             can_ID = IntegerAndBytes.bytesToInt32(bytes);
             bytesToBeReceived = 2;
             receiveStatus++;
-            port.writeBytes(bytes,4);
-            tic = System.currentTimeMillis();
+            console(ConsoleStatus.INFO,"ID:"+String.format("0x%x",can_ID)+" received successfully");
+            if(port.writeBytes(bytes,4)<=0){
+                console(ConsoleStatus.ERROR,"Ack ID:"+String.format("0x%x",can_ID)+" sending failed");
+                is_failed = true;
+            }else {
+                console(ConsoleStatus.INFO, "Ack ID:" + String.format("0x%x", can_ID) + " sent successfully");
+            }
         }else if(receiveStatus == LEN){
             //LEN
             bytesToBeReceived = IntegerAndBytes.bytesToInt16(bytes);
             receiveStatus++;
-            port.writeBytes("O".getBytes(),1);
-            tic = System.currentTimeMillis();
+            console(ConsoleStatus.INFO,"Length:"+bytesToBeReceived+" received successfully");
+            if(port.writeBytes(bytes,2)<=0){
+                console(ConsoleStatus.ERROR,"Ack Length:"+bytesToBeReceived+" sending failed");
+                is_failed = true;
+            }else{
+                console(ConsoleStatus.INFO,"Ack Length:"+bytesToBeReceived+" sent successfully");
+            }
         }else if(receiveStatus == DATA){
             //DATA
             bytesToBeReceived = 1;
             receiveStatus++;
             receiveData = bytes;
             int crc = crc32.calculate(receiveData);
-            port.writeBytes(IntegerAndBytes.int32ToBytes(crc),4);
-            tic = System.currentTimeMillis();
+            console(ConsoleStatus.INFO,"Data received successfully");
+            if(port.writeBytes(IntegerAndBytes.int32ToBytes(crc),4)<=0){
+                console(ConsoleStatus.ERROR,"Ack CRC:"+String.format("0x%x",crc)+" sending failed");
+                is_failed = true;
+            }else{
+                console(ConsoleStatus.INFO,"Ack CRC:"+String.format("0x%x",crc)+" sent successfully");
+            }
         }else if(receiveStatus == END){
             //END
             bytesToBeReceived = 1;
             receiveStatus = START;
             if(Arrays.equals("\0".getBytes(),bytes))
                 canReceiveCallback.canReceiveCallback(can_ID,receiveData);
-            port.writeBytes("O".getBytes(),1);
-            tic = System.currentTimeMillis();
+            console(ConsoleStatus.INFO,"End byte '"+bytes[0]+"' received successfully");
+            if(port.writeBytes("O".getBytes(),1)<=0){
+                console(ConsoleStatus.ERROR,"End byte ack 'O' sending failed");
+                is_failed = true;
+            }else {
+                console(ConsoleStatus.INFO, "End byte ack 'O' sent successfully");
+            }
+        }
+
+        tic = System.currentTimeMillis();
+        if(is_failed){
+            receiveStatus = START;
+            bytesToBeReceived = 1;
         }
     }
 
@@ -370,8 +398,24 @@ public class SerialUART {
      * @param bytes     : data bytes
      */
     public void send(int id,byte[] bytes){
-//        canTransmit(id, bytes);
-        new Thread(()-> canTransmit(id, bytes)).start();
+        new Thread(()->{
+            CanTransmitStatus status;
+            for (int i = 0; i < TRANSMIT_TRY; i++) {
+                status = canTransmit(id, bytes);
+                if(status == CanTransmitStatus.SUCCESS) {
+                    console(ConsoleStatus.INFO,"Data sent with ID: "+id);
+                    canTransmitCallback.canTransmitCallback(CanTransmitStatus.SUCCESS);
+                    return;
+                } else if (status == CanTransmitStatus.CRC_FAILED) {
+                    console(ConsoleStatus.WARNING,"Data sent with ID: "+id+" (CRC Failed)");
+                    canTransmitCallback.canTransmitCallback(CanTransmitStatus.CRC_FAILED);
+                    return;
+                }
+                console(ConsoleStatus.WARNING,"Retrying to send data with ID: "+id);
+            }
+            console(ConsoleStatus.ERROR,"Failed to send data with ID: "+id);
+            canTransmitCallback.canTransmitCallback(CanTransmitStatus.ERROR);
+        }).start();
     }
 
     /**
