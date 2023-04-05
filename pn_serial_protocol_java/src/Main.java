@@ -13,6 +13,8 @@ public class Main {
 //        uart.setCanReceiveCallback(flash::receiveCallback);
 
         uart.setCanTransmitCallback(status -> {
+            if(status != SerialUART.CanTransmitStatus.SUCCESS)
+                System.out.println("Transmit data failed");
             transmitted = true;
 //            flash.transmittedCallback();
 //            System.out.println("Transmitted");
@@ -20,7 +22,7 @@ public class Main {
         System.out.println(uart.connect() ? "Connected" : "Connection failed");
 //        while(true){
         transmitted = true;
-        for(int i=1;i<=(1024);i++) {
+        for(int i=1;i<=(10*1024);i++) {
             while (!transmitted)
                 Thread.onSpinWait();
             System.out.println("Sending "+i);
