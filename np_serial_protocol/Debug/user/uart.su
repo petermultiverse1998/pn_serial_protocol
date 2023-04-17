@@ -1,7 +1,0 @@
-../user/uart.c:30:13:console	24	static
-../user/uart.c:64:16:sendAndack	40	static
-../user/uart.c:92:13:receiveThread	80	dynamic
-../user/uart.c:208:16:sendThread	56	static
-../user/uart.c:247:6:uart_init	24	static
-../user/uart.c:261:5:uart_transmit	32	static
-../user/uart.c:271:6:uart_loop	8	static
