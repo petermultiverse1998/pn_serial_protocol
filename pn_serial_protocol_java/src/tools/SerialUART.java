@@ -26,9 +26,9 @@ public class SerialUART {
     private final SerialPort port;
 
     private static final long TRANSMIT_RECEIVE_TIMEOUT = 1000;
-    private static final int TRANSMIT_TRY = 2;
+    private static final int TRANSMIT_TRY = 5;
 
-    private static final long RECEIVE_TIMEOUT = 1000;
+    private static final long RECEIVE_TIMEOUT = 100000;
 
     private CanTransmitCallback canTransmitCallback =(status)-> {};
     private UartTransmitCallback uartTransmitCallback =()-> {};
@@ -406,7 +406,7 @@ public class SerialUART {
                     console(ConsoleStatus.INFO,"Data sent with ID: "+id);
                     canTransmitCallback.canTransmitCallback(CanTransmitStatus.SUCCESS);
                     return;
-                } else if (status == CanTransmitStatus.CRC_FAILED) {
+                }else if (status == CanTransmitStatus.CRC_FAILED) {
                     console(ConsoleStatus.WARNING,"Data sent with ID: "+id+" (CRC Failed)");
                     canTransmitCallback.canTransmitCallback(CanTransmitStatus.CRC_FAILED);
                     return;
