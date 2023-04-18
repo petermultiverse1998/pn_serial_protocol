@@ -31,7 +31,7 @@ public class Main {
         System.out.println(uart.connect() ? "Connected" : "Connection failed");
 //        while(true){
         transmitted = true;
-        for(int i=1;i<=(10*1024);i++) {
+        for(int i=1;i<=(10);i++) {
             while (!transmitted)
                 Thread.onSpinWait();
 //            try { 
