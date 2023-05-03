@@ -14,6 +14,7 @@ public class Main {
 //        uart.setCanReceiveCallback(flash::receiveCallback);
         uart.setCanReceiveCallback((id, bytes) -> {
             System.out.printf("0x%x (%d)\n",id,bytes.length);
+            transmitted = true;
 //            StringBuilder builder = new StringBuilder();
 //            for(byte b: bytes)
 //                builder.append((char) b);
@@ -23,25 +24,30 @@ public class Main {
         uart.setCanTransmitCallback(status -> {
             if(status != SerialUART.CanTransmitStatus.SUCCESS)
                 System.out.println("Transmit data failed");
-            transmitted = true;
+//            transmitted = true;
 //            flash.transmittedCallback();
 //            System.out.println("Transmitted");
         });
         System.out.println(uart.connect() ? "Connected" : "Connection failed");
 //        while(true){
-//        transmitted = true;
-//        for(int i=1;i<=(10*1024);i++) {
-//            while (!transmitted)
-//                Thread.onSpinWait();
+        transmitted = true;
+        for(int i=1;i<=(10);i++) {
+            while (!transmitted)
+                Thread.onSpinWait();
+//            try { 
+//                Thread.sleep(100);
+//            } catch (InterruptedException e) {
+//                throw new RuntimeException(e);
+//            }
 //            System.out.println("Sending "+i);
-//            uart.send(i, new byte[]{1, 2, 3, 4, 5, 6, 7, 8});
-//            transmitted = false;
-////            try {
-////                Thread.sleep(10);
-////            } catch (InterruptedException e) {
-////                throw new RuntimeException(e);
-////            }
-//        }
+            uart.send(i, new byte[]{1, 2, 3, 4, 5, 6, 7, 8});
+            transmitted = false;
+//            try {
+//                Thread.sleep(10);
+//            } catch (InterruptedException e) {
+//                throw new RuntimeException(e);
+//            }
+        }
 //        System.out.println("Retrying.....");
 //        }
     }

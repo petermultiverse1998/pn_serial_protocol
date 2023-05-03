@@ -8,8 +8,20 @@ import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Queue;
 import java.util.Stack;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class SerialUART {
+    /*This section is for special can send or receive no registered callback get called*/
+    private static final int ADAPTER_ID = 0x01;
+    private volatile String adapterReceive = "";
+    private static final String ADAPTER_REQUEST = "ARQ";
+    private static final String ADAPTER_RESPONSE = "ARS";
+    private static final String FLASH_ENABLE_REQUEST = "FERQ";
+    private static final String FLASH_ENABLE_RESPONSE = "FERS";
+    private static final String FLASH_DISABLE_REQUEST = "FDRQ";
+    private static final String FLASH_DISABLE_RESPONSE = "FDRS";
+
+    /***********************************************************************************/
 
     private static final int START = 0;
     private static final int ID = 1;
@@ -26,9 +38,9 @@ public class SerialUART {
     private final SerialPort port;
 
     private static final long TRANSMIT_RECEIVE_TIMEOUT = 1000;
-    private static final int TRANSMIT_TRY = 5;
+    private static final int TRANSMIT_TRY = 3;
 
-    private static final long RECEIVE_TIMEOUT = 100000;
+    private static final long RECEIVE_TIMEOUT = 1000;
 
     private CanTransmitCallback canTransmitCallback =(status)-> {};
     private UartTransmitCallback uartTransmitCallback =()-> {};
@@ -47,11 +59,12 @@ public class SerialUART {
 
         if(status==ConsoleStatus.ERROR) {
             System.out.println(ConsoleColors.RED+element+":"+msg+ConsoleColors.RESET);
+//            Thread.dumpStack();
         }else if(status==ConsoleStatus.INFO){
 //            System.out.println(ConsoleColors.GREEN+element+":"+msg+ConsoleColors.RESET);
         }else if(status==ConsoleStatus.WARNING){
-            System.out.println(ConsoleColors.YELLOW+element+":"+msg+ConsoleColors.RESET);
-            Thread.dumpStack();
+//            System.out.println(ConsoleColors.YELLOW+element+":"+msg+ConsoleColors.RESET);
+//            Thread.dumpStack();
         }else{
             System.out.println(element+":"+msg);
         }
@@ -123,6 +136,18 @@ public class SerialUART {
         }
     }
 
+    private boolean isAdapter(){
+        long tic = System.currentTimeMillis();
+        long TIMEOUT = 10000;
+
+        enableCanMode();
+        adapterReceive = "";
+        send(ADAPTER_ID,ADAPTER_REQUEST.getBytes());
+        while(!adapterReceive.equals(ADAPTER_RESPONSE) && System.currentTimeMillis()-tic<TIMEOUT)
+            Thread.onSpinWait();
+        return adapterReceive.equals(ADAPTER_RESPONSE);
+    }
+
     ////////////////////////////////////CAN TRANSMIT AND RECEIVE/////////////////////////////////////
 
     private enum SendAndAckStatus{ERROR,SUCCESS,INCORRECT_ACK}
@@ -137,6 +162,9 @@ public class SerialUART {
      */
     private SendAndAckStatus sendAndAck(byte[] bytes,byte[] ack,long time_out,int num_of_try,boolean returnInIncorrectAck){
         for(int j=0;j<num_of_try;j++) {
+            if(!port.isOpen())
+                return SendAndAckStatus.ERROR;
+
             /* Sending bytes */
             int writingStatus =  port.writeBytes(bytes, bytes.length);
             if(writingStatus<0){
@@ -165,6 +193,9 @@ public class SerialUART {
 
             console(ConsoleStatus.INFO,"Bytes written and waiting for bytes to be received...");
             while ((System.currentTimeMillis() - tic) <= time_out) {
+                if(!port.isOpen())
+                    return SendAndAckStatus.ERROR;
+
                 if(!isByteReceived)
                     continue;
 
@@ -318,8 +349,15 @@ public class SerialUART {
             //END
             bytesToBeReceived = 1;
             receiveStatus = START;
-            if(Arrays.equals("\0".getBytes(),bytes))
-                canReceiveCallback.canReceiveCallback(can_ID,receiveData);
+            if(Arrays.equals("\0".getBytes(),bytes)) {
+                if(can_ID==ADAPTER_ID){
+                    StringBuilder builder = new StringBuilder();
+                    for(byte b:receiveData)
+                        builder.append((char)b);
+                    adapterReceive = builder.toString();
+                }else
+                    canReceiveCallback.canReceiveCallback(can_ID, receiveData);
+            }
             console(ConsoleStatus.INFO,"End byte '"+bytes[0]+"' received successfully");
             if(port.writeBytes("O".getBytes(),1)<=0){
                 console(ConsoleStatus.ERROR,"End byte ack 'O' sending failed");
@@ -401,20 +439,25 @@ public class SerialUART {
         new Thread(()->{
             CanTransmitStatus status;
             for (int i = 0; i < TRANSMIT_TRY; i++) {
+                if(!port.isOpen())
+                    return;
                 status = canTransmit(id, bytes);
                 if(status == CanTransmitStatus.SUCCESS) {
                     console(ConsoleStatus.INFO,"Data sent with ID: "+id);
-                    canTransmitCallback.canTransmitCallback(CanTransmitStatus.SUCCESS);
+                    if(id!=ADAPTER_ID)
+                        canTransmitCallback.canTransmitCallback(CanTransmitStatus.SUCCESS);
                     return;
                 }else if (status == CanTransmitStatus.CRC_FAILED) {
                     console(ConsoleStatus.WARNING,"Data sent with ID: "+id+" (CRC Failed)");
-                    canTransmitCallback.canTransmitCallback(CanTransmitStatus.CRC_FAILED);
+                    if(id!=ADAPTER_ID)
+                        canTransmitCallback.canTransmitCallback(CanTransmitStatus.CRC_FAILED);
                     return;
                 }
                 console(ConsoleStatus.WARNING,"Retrying to send data with ID: "+id);
             }
             console(ConsoleStatus.ERROR,"Failed to send data with ID: "+id);
-            canTransmitCallback.canTransmitCallback(CanTransmitStatus.ERROR);
+            if(id!=ADAPTER_ID)
+                canTransmitCallback.canTransmitCallback(CanTransmitStatus.ERROR);
         }).start();
     }
 
@@ -440,6 +483,50 @@ public class SerialUART {
     public void enableCanMode(){
         statusStack.clear();
         statusStack.push(RECEIVING);
+    }
+
+    /**
+     * It enables the flash mode
+     * @return is flash enabled?
+     */
+    public boolean enableFlashMode(){
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+
+        long tic = System.currentTimeMillis();
+        long TIMEOUT = 10000;
+
+        enableCanMode();
+        adapterReceive = "";
+        send(ADAPTER_ID,FLASH_ENABLE_REQUEST.getBytes());
+        while(!adapterReceive.equals(FLASH_ENABLE_RESPONSE) && System.currentTimeMillis()-tic<TIMEOUT)
+            Thread.onSpinWait();
+        return adapterReceive.equals(FLASH_ENABLE_RESPONSE);
+    }
+
+    /**
+     * It disables the flash mode
+     * @return is flash disabled?
+     */
+    public boolean disableFlashMode(){
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
+        long tic = System.currentTimeMillis();
+        long TIMEOUT = 10000;
+
+        enableCanMode();
+        send(ADAPTER_ID,FLASH_DISABLE_REQUEST.getBytes());
+        while(!adapterReceive.equals(FLASH_DISABLE_RESPONSE) && System.currentTimeMillis()-tic<TIMEOUT)
+            Thread.onSpinWait();
+        return adapterReceive.equals(FLASH_DISABLE_RESPONSE);
     }
 
     //////////////////////////////////SET CALLBACK//////////////////////////
@@ -533,5 +620,35 @@ public class SerialUART {
     public static interface DisconnectCallback{
         void disconnectCallback();
     }
+
+    /////////////////////////////STATIC CLASS/////////////////////////
+    public static SerialPort detectAdapter(){
+        SerialPort[] ports = SerialPort.getCommPorts();
+        if (ports == null)
+            return null;
+        if (ports.length == 0)
+            return null;
+
+        SerialPort port = null;
+        for (SerialPort p : ports) {
+            System.out.println(p.getDescriptivePortName());
+
+            SerialUART uart = new SerialUART(p,115200);
+            if(uart.connect()){
+                if(uart.isAdapter()) {
+                    port = p;
+                    port.removeDataListener();
+                    break;
+                }
+            }
+        }
+
+        if(port!=null)
+            System.out.println("Adapter :"+port.getDescriptivePortName());
+        else
+            System.out.println("Adapter not found");
+        return port;
+    }
+
 
 }
